@@ -37,9 +37,9 @@ def main():
     model.fit(x_train, y_train)
 
     # --- Шаг 3: Оценка модели (по желанию) ---
-    # y_pred = model.predict(x_test)
-    # mae = mean_absolute_error(y_test, y_pred)
-    # print(f"MAE: {mae:.2f} грн")
+    y_pred = model.predict(x_test)
+    mae = mean_absolute_error(y_test, y_pred)
+    print(f"MAE: {mae:.2f} грн")
 
     # plt.scatter(y_test, y_pred, alpha=0.5)
     # plt.xlabel("Фактическая стоимость")
