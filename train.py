@@ -18,6 +18,9 @@ def save_columns(feature_columns):
 def main():
     # --- Шаг 1: Загрузка и подготовка данных ---
     df = pd.read_csv("restoration_data.csv")
+    first_row = df.iloc[[0]]
+    shuffled_rest = df.iloc[1:].sample(frac=1).reset_index(drop=True)
+    df = pd.concat([first_row, shuffled_rest], ignore_index=True)
     df.columns = df.columns.str.strip()
 
     # Кодируем категориальные признаки с помощью get_dummies
