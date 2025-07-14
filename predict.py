@@ -9,7 +9,7 @@ FEATURE_COLUMNS_PATH = "feature_columns.json"
 
 def preprocess_input(data_dict, feature_columns):
     df = pd.DataFrame([data_dict])
-    df = pd.get_dummies(df, columns=["тип_здания", "степень_повреждения", "регион"])
+    df = pd.get_dummies(df, columns=["тип_будівлі", "ступінь_пошкодження", "регіон"])
 
     for col in feature_columns:
         if col not in df.columns:
@@ -29,11 +29,11 @@ def main():
 
     # Приклад вхідних даних
     input_data = {
-        "площадь": 7200,
-        "этажность": 9,
-        "тип_здания": "багатоповерховий",
-        "степень_повреждения": "середнє",
-        "регион": "Львів"
+        "площа": 7200,
+        "поверховість": 9,
+        "тип_будівлі": "багатоповерховий",
+        "ступінь_пошкодження": "середнє",
+        "регіон": "м. Львів"
     }
 
     x_new = preprocess_input(input_data, feature_columns)

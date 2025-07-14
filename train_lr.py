@@ -7,7 +7,7 @@ import json
 
 
 def save_columns(feature_columns):
-    feature_columns.remove("стоимость_восстановления")  # убираем целевую переменную
+    feature_columns.remove("вартість_відновлення")  # приховуємо цільову змінну
 
     # Запишемо список колонок у JSON-файл
     with open("feature_columns.json", "w", encoding="utf-8") as f:
@@ -23,13 +23,13 @@ def main():
     df.columns = df.columns.str.strip()
 
     # Кодуємо категоріальні ознаки за допомогою get_dummies
-    df = pd.get_dummies(df, columns=["тип_здания", "степень_повреждения", "регион"])
+    df = pd.get_dummies(df, columns=["тип_будівлі", "ступінь_пошкодження", "регіон"])
 
     save_columns(df.columns.tolist())
 
     # Розділяємо цільову змінну та ознаки
-    y = df["стоимость_восстановления"]
-    x = df.drop(columns=["стоимость_восстановления"])
+    y = df["вартість_відновлення"]
+    x = df.drop(columns=["вартість_відновлення"])
 
     # Ділимо на навчальну та тестову вибірки
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=42)
@@ -41,7 +41,7 @@ def main():
     # Оцінка якості (за бажанням)
     y_pred = model.predict(x_test)
     mae = mean_absolute_error(y_test, y_pred)
-    print(f"MAE на тестовой выборке: {mae:.2f} грн")
+    print(f"MAE: {mae:.2f} грн")
 
     # --- Крок 3: Зберігаємо модель ---
     joblib.dump(model, "restoration_model_lr.pkl")
