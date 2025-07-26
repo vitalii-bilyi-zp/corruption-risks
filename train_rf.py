@@ -4,6 +4,10 @@ from sklearn.metrics import mean_absolute_error
 from sklearn.ensemble import RandomForestRegressor
 import joblib
 import json
+import matplotlib.pyplot as plt
+import numpy as np
+from sklearn import tree
+from sklearn.tree import export_text
 
 
 def save_columns(feature_columns):
@@ -17,13 +21,16 @@ def save_columns(feature_columns):
 def main():
     # --- Крок 1: Завантаження та підготовка даних ---
     df = pd.read_csv("restoration_data.csv")
-    first_row = df.iloc[[0]]
-    shuffled_rest = df.iloc[1:].sample(frac=1).reset_index(drop=True)
-    df = pd.concat([first_row, shuffled_rest], ignore_index=True)
+
+    # shuffle in random order
+    # first_row = df.iloc[[0]]
+    # shuffled_rest = df.iloc[1:].sample(frac=1).reset_index(drop=True)
+    # df = pd.concat([first_row, shuffled_rest], ignore_index=True)
+
     df.columns = df.columns.str.strip()
 
     # Кодуємо категоріальні ознаки за допомогою get_dummies
-    df = pd.get_dummies(df, columns=["тип_будівлі", "ступінь_пошкодження", "регіон"])
+    df = pd.get_dummies(df, columns=["тип_будівлі", "ступінь_пошкодження", "регіон", "тип_ремонту"])
 
     save_columns(df.columns.tolist())
 
@@ -45,6 +52,11 @@ def main():
 
     # --- Крок 3: Зберігаємо модель ---
     joblib.dump(model, "restoration_model_rf.pkl")
+
+    # --- Крок 4: Текстове представлення одного дерева ---
+    tree_text = export_text(model.estimators_[0], feature_names=list(x_train.columns), max_depth=3)
+    print("\nАналітична форма дерева (if-else логіка):")
+    print(tree_text)
 
 
 if __name__ == '__main__':

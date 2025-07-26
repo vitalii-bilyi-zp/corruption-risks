@@ -14,16 +14,27 @@ def save_columns(feature_columns):
         json.dump(feature_columns, f, ensure_ascii=False, indent=4)
 
 
+def encode_ordinal(df, columns):
+    for col in columns:
+        df[col] = df[col].astype("category").cat.codes + 1
+        # +1 – щоб кодування починалося з 1, а не з 0
+    return df
+
+
 def main():
     # --- Крок 1: Завантаження та підготовка даних ---
     df = pd.read_csv("restoration_data.csv")
-    first_row = df.iloc[[0]]
-    shuffled_rest = df.iloc[1:].sample(frac=1).reset_index(drop=True)
-    df = pd.concat([first_row, shuffled_rest], ignore_index=True)
+
+    # shuffle in random order
+    # first_row = df.iloc[[0]]
+    # shuffled_rest = df.iloc[1:].sample(frac=1).reset_index(drop=True)
+    # df = pd.concat([first_row, shuffled_rest], ignore_index=True)
+
     df.columns = df.columns.str.strip()
 
-    # Кодуємо категоріальні ознаки за допомогою get_dummies
-    df = pd.get_dummies(df, columns=["тип_будівлі", "ступінь_пошкодження", "регіон"])
+    # Застосовуємо порядкове кодування для категоріальних ознак
+    categorical_cols = ["тип_будівлі", "ступінь_пошкодження", "регіон", "тип_ремонту"]
+    df = encode_ordinal(df, categorical_cols)
 
     save_columns(df.columns.tolist())
 
@@ -45,6 +56,18 @@ def main():
 
     # --- Крок 3: Зберігаємо модель ---
     joblib.dump(model, "restoration_model_lr.pkl")
+
+    # --- Крок 4: Вивід коефіцієнтів (АНАЛІТИЧНИЙ ВИРАЗ) ---
+    feature_names = x_train.columns
+    coefs = model.coef_
+    intercept = model.intercept_
+
+    print("\nАналітичний вираз лінійної регресії (з порядковим кодуванням):")
+    print(f"V = {intercept:.2f}", end=" ")
+    for name, coef in zip(feature_names, coefs):
+        sign = "+" if coef >= 0 else "-"
+        print(f"{sign} {abs(coef):.2f} * {name}", end=" ")
+    print("\n")
 
 
 if __name__ == '__main__':
