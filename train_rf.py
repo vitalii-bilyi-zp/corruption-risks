@@ -11,7 +11,7 @@ from sklearn.tree import export_text
 
 
 def save_columns(feature_columns):
-    feature_columns.remove("вартість_відновлення")  # приховуємо цільову змінну
+    feature_columns.remove("restoration_cost")  # приховуємо цільову змінну
 
     # Запишемо список колонок у JSON-файл
     with open("feature_columns.json", "w", encoding="utf-8") as f:
@@ -30,13 +30,13 @@ def main():
     df.columns = df.columns.str.strip()
 
     # Кодуємо категоріальні ознаки за допомогою get_dummies
-    df = pd.get_dummies(df, columns=["тип_будівлі", "ступінь_пошкодження", "регіон", "тип_ремонту"])
+    df = pd.get_dummies(df, columns=["building_type", "damage_level", "region", "repair_type"])
 
     save_columns(df.columns.tolist())
 
     # Розділяємо цільову змінну та ознаки
-    y = df["вартість_відновлення"]
-    x = df.drop(columns=["вартість_відновлення"])
+    y = df["restoration_cost"]
+    x = df.drop(columns=["restoration_cost"])
 
     # Ділимо на навчальну та тестову вибірки
     x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=42)
