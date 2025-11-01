@@ -20,7 +20,7 @@ def save_columns(feature_columns):
 
 def main():
     # --- Крок 1: Завантаження та підготовка даних ---
-    df = pd.read_csv("restoration_data.csv")
+    df = pd.read_csv("restoration_data.csv", encoding="utf-8-sig")
 
     # shuffle in random order
     # first_row = df.iloc[[0]]

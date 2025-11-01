@@ -7,3 +7,4 @@ matplotlib
 Flask
 pydantic>=2
 python-dotenv
+shap

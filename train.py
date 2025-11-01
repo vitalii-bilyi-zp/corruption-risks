@@ -5,56 +5,134 @@ import xgboost as xgb
 import joblib
 import json
 
+# ---- Output artifact constants ----
+MODEL_PATH = "restoration_model.pkl"
+FEATURE_COLUMNS_PATH = "feature_columns.json"
+FEATURE_GROUPS_PATH = "feature_groups.json"
+GLOBAL_IMPORTANCE_PATH = "global_importance.json"
+
+CATEGORICAL = ["building_type", "damage_level", "region", "repair_type"]
+
 
 def save_columns(feature_columns):
-    feature_columns.remove("restoration_cost")  # приховуємо цільову змінну
+    cols = list(feature_columns)
+    if "restoration_cost" in cols:
+        cols.remove("restoration_cost")
+    with open(FEATURE_COLUMNS_PATH, "w", encoding="utf-8") as f:
+        json.dump(cols, f, ensure_ascii=False, indent=4)
 
-    # Запишемо список колонок у JSON-файл
-    with open("feature_columns.json", "w", encoding="utf-8") as f:
-        json.dump(feature_columns, f, ensure_ascii=False, indent=4)
+
+def build_feature_groups(feature_columns):
+    """Group one-hot encoded columns back into human-readable feature groups."""
+    groups = {
+        "area": ["area"],
+        "floors": ["floors"],
+        "building_type": [],
+        "damage_level": [],
+        "region": [],
+        "repair_type": [],
+    }
+    for col in feature_columns:
+        if col in ("area", "floors", "restoration_cost"):
+            continue
+        matched = False
+        for cat in CATEGORICAL:
+            prefix = f"{cat}_"
+            if col.startswith(prefix):
+                groups[cat].append(col)
+                matched = True
+                break
+        if not matched and col not in groups.get(col, []):
+            # If other columns appear, keep them as separate groups
+            groups.setdefault(col, []).append(col)
+    return groups
+
+
+def safe_dump_json(obj, path):
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(obj, f, ensure_ascii=False, indent=4)
 
 
 def main():
-    # --- Крок 1: Завантаження та підготовка даних ---
-    df = pd.read_csv("restoration_data.csv")
-
-    # shuffle in random order
-    # first_row = df.iloc[[0]]
-    # shuffled_rest = df.iloc[1:].sample(frac=1).reset_index(drop=True)
-    # df = pd.concat([first_row, shuffled_rest], ignore_index=True)
-
+    # --- Step 1: Load and prepare data ---
+    df = pd.read_csv("restoration_data.csv", encoding="utf-8-sig")
     df.columns = df.columns.str.strip()
+    df = pd.get_dummies(df, columns=CATEGORICAL)
 
-    # Кодуємо категоріальні ознаки за допомогою get_dummies
-    df = pd.get_dummies(df, columns=["building_type", "damage_level", "region", "repair_type"])
-
+    # Save feature list and groups
     save_columns(df.columns.tolist())
+    feature_columns = [c for c in df.columns if c != "restoration_cost"]
+    feature_groups = build_feature_groups(df.columns.tolist())
+    safe_dump_json(feature_groups, FEATURE_GROUPS_PATH)
 
-    # Розділяємо цільову змінну та ознаки
+    # --- Step 2: Split target and features ---
     y = df["restoration_cost"]
-    x = df.drop(columns=["restoration_cost"])
+    X = df[feature_columns]
 
-    # Ділимо на навчальну та тестову вибірки
-    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=1)
+    x_train, x_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=1
+    )
 
-    # --- Крок 2: Навчання моделі ---
-    model = xgb.XGBRegressor(objective='reg:squarederror', random_state=1)
+    # --- Step 3: Train model ---
+    model = xgb.XGBRegressor(objective="reg:squarederror", random_state=1)
     model.fit(x_train, y_train)
 
-    # --- Крок 3: Оцінка моделі (за бажанням) ---
-    y_pred = model.predict(x_test)
-    mae = mean_absolute_error(y_test, y_pred)
+    # --- Step 4: Evaluate ---
+    mae = mean_absolute_error(y_test, model.predict(x_test))
     print(f"MAE: {mae:.2f} грн")
 
-    # --- Крок 4: Зберігаємо модель через joblib ---
-    joblib.dump(model, "restoration_model.pkl")
+    # --- Step 5: Persist model ---
+    joblib.dump(model, MODEL_PATH)
 
-    # --- Крок 5: Текстове представлення одного дерева ---
-    print("\nАналітична форма дерева XGBoost (if-else логіка):")
+    # --- Step 6: Global importance (SHAP → fallback: XGBoost gain) ---
+    global_importance = {}
+    try:
+        import shap  # pip install shap
+        explainer = shap.TreeExplainer(model)
+        shap_values = explainer.shap_values(x_test)  # shape: (n_samples, n_features)
+        abs_mean = (abs(shap_values)).mean(axis=0)   # mean absolute contribution per feature
+
+        # Map to dict: feature -> score
+        per_feature = {feat: float(score) for feat, score in zip(feature_columns, abs_mean)}
+
+        # Aggregate by groups: sum of absolute SHAP over group columns
+        per_group = {}
+        for g, cols in feature_groups.items():
+            per_group[g] = float(sum(per_feature.get(c, 0.0) for c in cols))
+
+        # Normalize to 100%
+        total = sum(per_group.values()) or 1.0
+        per_group_pct = {g: (v / total) * 100.0 for g, v in per_group.items()}
+
+        # Sorted dict
+        global_importance = dict(sorted(per_group_pct.items(), key=lambda kv: kv[1], reverse=True))
+        print("\nGlobal group importance (SHAP, %):")
+        for k, v in global_importance.items():
+            print(f"  {k}: {v:.1f}%")
+    except Exception as e:
+        print(f"\n[WARN] SHAP not available ({e}). Falling back to XGBoost gain.")
+        booster = model.get_booster()
+        gain = booster.get_score(importance_type="gain")  # dict: feature -> gain
+        # Expand to full dict
+        per_feature = {feat: float(gain.get(feat, 0.0)) for feat in feature_columns}
+        per_group = {}
+        for g, cols in feature_groups.items():
+            per_group[g] = float(sum(per_feature.get(c, 0.0) for c in cols))
+        total = sum(per_group.values()) or 1.0
+        global_importance = {g: (v / total) * 100.0 for g, v in per_group.items()}
+        global_importance = dict(sorted(global_importance.items(), key=lambda kv: kv[1], reverse=True))
+        print("Global group importance (gain, %):")
+        for k, v in global_importance.items():
+            print(f"  {k}: {v:.1f}%")
+
+    safe_dump_json(global_importance, GLOBAL_IMPORTANCE_PATH)
+
+    # --- (Optional) dump first tree text ---
     booster = model.get_booster()
-    tree_text = booster.get_dump(with_stats=False)[0]  # беремо тільки перше дерево
+    tree_text = booster.get_dump(with_stats=False)[0]
+    print("\nXGBoost tree textual dump (first tree):")
     print(tree_text)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
