@@ -3,23 +3,18 @@ import joblib
 import json
 from pathlib import Path
 
+from encoding import preprocess_for_inference
+
 MODEL_PATH = "restoration_model.pkl"
 FEATURE_COLUMNS_PATH = "feature_columns.json"
 FEATURE_GROUPS_PATH = "feature_groups.json"
 
-CATEGORICAL = ["building_type", "damage_level", "region", "repair_type"]
 
-
-def preprocess_input(data_dict, feature_columns):
-    """Prepare the input data into the same structure used during model training."""
-    df = pd.DataFrame([data_dict])
-    df = pd.get_dummies(df, columns=CATEGORICAL)
-    # Add missing columns and reorder to match the training feature order
-    for col in feature_columns:
-        if col not in df.columns:
-            df[col] = 0
-    df = df[feature_columns]
-    return df
+def preprocess_input(data_dict, feature_columns, feature_groups):
+    """Prepare the input data into the same structure used during model training.
+    Автоматично визначає версію кодування (v1.0: one-hot, v2.0: fuzzy).
+    """
+    return preprocess_for_inference(data_dict, feature_columns, feature_groups)
 
 
 def load_json(path):
@@ -33,6 +28,8 @@ def aggregate_local_shap(shap_vec, feature_columns, feature_groups):
     per_feature = {feat: float(val) for feat, val in zip(feature_columns, shap_vec)}
     per_group = {}
     for g, cols in feature_groups.items():
+        if not isinstance(cols, list):
+            continue
         per_group[g] = sum(per_feature.get(c, 0.0) for c in cols)
 
     # Compute absolute sum to calculate relative importance (% impact)
@@ -70,7 +67,7 @@ def main():
         "repair_type": "capital"
     }
 
-    X = preprocess_input(input_data, feature_columns)
+    X = preprocess_input(input_data, feature_columns, feature_groups)
     y_hat = float(model.predict(X)[0])
 
     print(f"\nPredicted restoration cost: {y_hat:,.2f} UAH")

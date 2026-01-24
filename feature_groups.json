@@ -1,9 +1,20 @@
 {
+    "version": "2.0",
     "area": [
         "area"
     ],
     "floors": [
         "floors"
+    ],
+    "damage_level": [
+        "damage_level_Легке",
+        "damage_level_Середнє",
+        "damage_level_Тяжке"
+    ],
+    "repair_type": [
+        "repair_type_Поточний",
+        "repair_type_Капітальний",
+        "repair_type_Повна реконструкція"
     ],
     "building_type": [
         "building_type_Інше",
@@ -11,11 +22,6 @@
         "building_type_Багатоповерховий будинок",
         "building_type_Заклад вищої освіти",
         "building_type_Заклад культури"
-    ],
-    "damage_level": [
-        "damage_level_Легке",
-        "damage_level_Середнє",
-        "damage_level_Тяжке"
     ],
     "region": [
         "region_Київська обл.",
@@ -40,10 +46,5 @@
         "region_м. Херсон",
         "region_м. Черкаси",
         "region_м. Чернігів"
-    ],
-    "repair_type": [
-        "repair_type_Капітальний",
-        "repair_type_Повна реконструкція",
-        "repair_type_Поточний"
     ]
 }

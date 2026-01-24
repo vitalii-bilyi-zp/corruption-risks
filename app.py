@@ -6,10 +6,12 @@ from flask import Flask, request, jsonify
 from pydantic import BaseModel, Field, ValidationError
 from pathlib import Path
 
+from encoding import preprocess_for_inference
+
 # -------- Configuration --------
 MODEL_PATH = os.getenv("MODEL_PATH", "restoration_model.pkl")
 FEATURE_COLUMNS_PATH = os.getenv("FEATURE_COLUMNS_PATH", "feature_columns.json")
-FEATURE_GROUPS_PATH = os.getenv("FEATURE_GROUPS_PATH", "feature_groups.json")  # optional artifact from training
+FEATURE_GROUPS_PATH = os.getenv("FEATURE_GROUPS_PATH", "feature_groups.json")
 
 # API key must be passed in X-API-Key header
 API_KEY = os.getenv("API_KEY")
@@ -33,45 +35,34 @@ class Payload(BaseModel):
 # -------- Flask App --------
 app = Flask(__name__)
 
-# Load model and feature columns
+# Load model, feature columns and groups at startup
 with open(FEATURE_COLUMNS_PATH, "r", encoding="utf-8") as f:
     FEATURE_COLUMNS = json.load(f)
+
+FEATURE_GROUPS = {}
+if Path(FEATURE_GROUPS_PATH).exists():
+    with open(FEATURE_GROUPS_PATH, "r", encoding="utf-8") as f:
+        FEATURE_GROUPS = json.load(f)
+
 MODEL = joblib.load(MODEL_PATH)
 
-CATEGORICAL = ["building_type", "damage_level", "region", "repair_type"]
+# Визначаємо версію кодування з метаданих
+ENCODING_VERSION = FEATURE_GROUPS.get("version", "1.0")
 
 
 def preprocess_input(data_dict: dict) -> pd.DataFrame:
-    """Convert input JSON into DataFrame with the same structure as during training"""
-    df = pd.DataFrame([data_dict])
-    df = pd.get_dummies(df, columns=CATEGORICAL)
-
-    # Add missing columns and reorder according to training feature order
-    for col in FEATURE_COLUMNS:
-        if col not in df.columns:
-            df[col] = 0
-    df = df[FEATURE_COLUMNS]
-    return df
-
-
-def load_feature_groups(feature_columns):
+    """Convert input JSON into DataFrame with the same structure as during training.
+    Автоматично визначає версію кодування (v1.0: one-hot, v2.0: fuzzy).
     """
-    Load pre-saved feature groups (from training script).
-    If not available, generate them automatically by prefix.
-    """
-    if Path(FEATURE_GROUPS_PATH).exists():
-        with open(FEATURE_GROUPS_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
+    return preprocess_for_inference(data_dict, FEATURE_COLUMNS, FEATURE_GROUPS)
 
-    groups = {
-        "area": ["area"],
-        "floors": ["floors"],
-        "building_type": [c for c in feature_columns if c.startswith("building_type_")],
-        "damage_level": [c for c in feature_columns if c.startswith("damage_level_")],
-        "region": [c for c in feature_columns if c.startswith("region_")],
-        "repair_type": [c for c in feature_columns if c.startswith("repair_type_")],
-    }
-    return groups
+
+def get_feature_groups_for_aggregation():
+    """
+    Повертає групи ознак для агрегації SHAP-значень.
+    Виключає службові поля (version).
+    """
+    return {k: v for k, v in FEATURE_GROUPS.items() if isinstance(v, list)}
 
 
 def aggregate_local_contrib(shap_vec, feature_columns, feature_groups):
@@ -84,6 +75,8 @@ def aggregate_local_contrib(shap_vec, feature_columns, feature_groups):
     per_feature = {feat: float(val) for feat, val in zip(feature_columns, shap_vec)}
     per_group = {}
     for g, cols in feature_groups.items():
+        if not isinstance(cols, list):
+            continue
         per_group[g] = sum(per_feature.get(c, 0.0) for c in cols)
 
     # Compute relative impact in %
@@ -135,7 +128,7 @@ def predict_explain():
         X = preprocess_input(payload.model_dump())
         y_hat = float(MODEL.predict(X)[0])
 
-        feature_groups = load_feature_groups(FEATURE_COLUMNS)
+        feature_groups = get_feature_groups_for_aggregation()
 
         base_value = None
         contributions = []
@@ -162,6 +155,8 @@ def predict_explain():
             gain = booster.get_score(importance_type="gain")
             per_group = {}
             for g, cols in feature_groups.items():
+                if not isinstance(cols, list):
+                    continue
                 per_group[g] = sum(float(gain.get(col, 0.0)) for col in cols)
             total = sum(per_group.values()) or 1.0
             for g, v in sorted(per_group.items(), key=lambda kv: kv[1], reverse=True):

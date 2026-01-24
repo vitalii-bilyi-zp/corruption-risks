@@ -2,3 +2,4 @@
 .idea
 feature_columns.json
 .env
+__pycache__
