@@ -32,7 +32,7 @@ python app.py
 ```
 Raw CSV → Training Script → Model (.pkl) + Metadata (.json)
                                     ↓
-API Request → Pydantic Validation → One-Hot Encoding → Model Inference → Response
+API Request → Pydantic Validation → Encoding (version-based) → Model Inference → Response
 ```
 
 ### API Endpoints (app.py)
@@ -57,12 +57,26 @@ All endpoints except `/health` require `X-API-Key` header (configured via `API_K
 ### Generated Artifacts
 Training scripts produce:
 - `restoration_model*.pkl` - Serialized model
-- `feature_columns.json` - Feature column names after one-hot encoding
-- `feature_groups.json` - Mapping of encoded columns to original features
+- `feature_columns.json` - Feature column names after encoding
+- `feature_groups.json` - Mapping of encoded columns to original features + version field
 - `global_importance.json` - SHAP-based feature importance percentages
 
-### Feature Processing
-Categorical columns (`building_type`, `damage_level`, `region`, `repair_type`) are one-hot encoded. The API aligns input features to match training column order, adding zero columns for missing categories.
+### Feature Processing (encoding.py)
+Centralized encoding module with version-based backward compatibility:
+
+**Version 2.0 (current)** - Fuzzy encoding for ordinal features:
+- `damage_level`, `repair_type` - triangular membership functions preserving gradient information
+- `building_type`, `region` - standard one-hot encoding
+- Ordinal positions: Легке→0.0, Середнє→0.5, Тяжке→1.0
+
+**Version 1.0 (legacy)** - Pure one-hot encoding for all categorical features
+
+Version is determined by `"version"` field in `feature_groups.json`. API auto-detects version at runtime.
+
+### Encoding Comparison Script
+```bash
+python compare_encodings.py  # A/B comparison of one-hot vs fuzzy with k-fold CV
+```
 
 ### Explainability
 Primary: SHAP TreeExplainer for instance-level contributions. Fallback: XGBoost gain-based importance. Both aggregate one-hot columns back into human-readable feature groups.

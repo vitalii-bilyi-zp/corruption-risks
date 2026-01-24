@@ -61,10 +61,10 @@ def main():
     input_data = {
         "area": 7200,
         "floors": 9,
-        "building_type": "multi-storey",
-        "damage_level": "medium",
-        "region": "Lviv",
-        "repair_type": "capital"
+        "building_type": "Багатоповерховий будинок",
+        "damage_level": "Середнє",
+        "region": "м. Львів",
+        "repair_type": "Капітальний"
     }
 
     X = preprocess_input(input_data, feature_columns, feature_groups)

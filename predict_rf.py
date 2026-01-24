@@ -30,10 +30,10 @@ def main():
     input_data = {
         "area": 7200,
         "floors": 9,
-        "building_type": "багатоповерховий",
-        "damage_level": "середнє",
+        "building_type": "Багатоповерховий будинок",
+        "damage_level": "Середнє",
         "region": "м. Львів",
-        "repair_type": "капітальний"
+        "repair_type": "Капітальний"
     }
 
     x_new = preprocess_input(input_data, feature_columns)
