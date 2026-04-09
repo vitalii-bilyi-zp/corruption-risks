@@ -3,10 +3,12 @@ import json
 import joblib
 import pandas as pd
 from flask import Flask, request, jsonify
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, model_validator
 from pathlib import Path
+from typing import Optional, List
 
 from encoding import preprocess_for_inference
+from inflation import InflationService, BASE_YEAR, BASE_MONTH
 
 # -------- Configuration --------
 MODEL_PATH = os.getenv("MODEL_PATH", "restoration_model.pkl")
@@ -23,6 +25,12 @@ def check_key(req) -> bool:
 
 
 # -------- Input schema --------
+class InflationIndexRow(BaseModel):
+    year:        int
+    month:       int
+    index_value: float
+
+
 class Payload(BaseModel):
     area: float = Field(..., ge=0, description="Building area in m²")
     floors: int = Field(..., ge=0, description="Number of floors")
@@ -30,6 +38,19 @@ class Payload(BaseModel):
     damage_level: str
     region: str
     repair_type: str
+    work_year:  Optional[int] = Field(default=None, ge=2020, le=2040)
+    work_month: Optional[int] = Field(default=None, ge=1, le=12)
+    inflation_indices: Optional[List[InflationIndexRow]] = None
+
+    @model_validator(mode='after')
+    def check_year_month_together(self):
+        year_given  = self.work_year  is not None
+        month_given = self.work_month is not None
+        if year_given != month_given:
+            raise ValueError(
+                'work_year та work_month мають передаватись разом або не передаватись взагалі'
+            )
+        return self
 
 
 # -------- Flask App --------
@@ -48,6 +69,8 @@ MODEL = joblib.load(MODEL_PATH)
 
 # Визначаємо версію кодування з метаданих
 ENCODING_VERSION = FEATURE_GROUPS.get("version", "1.0")
+
+inflation_svc = InflationService()
 
 
 def preprocess_input(data_dict: dict) -> pd.DataFrame:
@@ -92,6 +115,7 @@ def health():
     return jsonify({"status": "ok"})
 
 
+
 @app.post("/predict")
 def predict():
     """Basic endpoint: returns only the predicted cost"""
@@ -99,12 +123,28 @@ def predict():
         return jsonify({"error": "unauthorized"}), 401
     try:
         payload = Payload.model_validate(request.get_json(force=True))
-        X = preprocess_input(payload.model_dump())
+        input_data = payload.model_dump(exclude={"work_year", "work_month", "inflation_indices"})
+        X = preprocess_input(input_data)
         y_hat = float(MODEL.predict(X)[0])
+        try:
+            inflation = inflation_svc.apply(
+                y_hat,
+                payload.work_year,
+                payload.work_month,
+                payload.inflation_indices,
+            )
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
         return jsonify({
-            "predicted_cost": y_hat,
-            "currency": "UAH",
-            "model": "XGBoostRegressor"
+            "predicted_cost": round(y_hat, 2),
+            "adjusted_cost":  inflation["adjusted_cost"],
+            "inflation_k":    inflation["inflation_k"],
+            "base_year":      inflation["base_year"],
+            "base_month":     inflation["base_month"],
+            "work_year":      inflation["work_year"],
+            "work_month":     inflation["work_month"],
+            "currency":       "UAH",
+            "model":          "XGBoostRegressor",
         })
     except ValidationError as ve:
         return jsonify({"error": ve.errors()}), 400
@@ -125,8 +165,18 @@ def predict_explain():
         return jsonify({"error": "unauthorized"}), 401
     try:
         payload = Payload.model_validate(request.get_json(force=True))
-        X = preprocess_input(payload.model_dump())
+        input_data = payload.model_dump(exclude={"work_year", "work_month", "inflation_indices"})
+        X = preprocess_input(input_data)
         y_hat = float(MODEL.predict(X)[0])
+        try:
+            inflation = inflation_svc.apply(
+                y_hat,
+                payload.work_year,
+                payload.work_month,
+                payload.inflation_indices,
+            )
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
 
         feature_groups = get_feature_groups_for_aggregation()
 
@@ -168,11 +218,17 @@ def predict_explain():
                 })
 
         return jsonify({
-            "predicted_cost": y_hat,
-            "currency": "UAH",
-            "model": "XGBoostRegressor",
-            "base_value": base_value,
-            "contributions": contributions
+            "predicted_cost": round(y_hat, 2),
+            "adjusted_cost":  inflation["adjusted_cost"],
+            "inflation_k":    inflation["inflation_k"],
+            "base_year":      inflation["base_year"],
+            "base_month":     inflation["base_month"],
+            "work_year":      inflation["work_year"],
+            "work_month":     inflation["work_month"],
+            "currency":       "UAH",
+            "model":          "XGBoostRegressor",
+            "base_value":     base_value,
+            "contributions":  contributions,
         })
 
     except ValidationError as ve:
