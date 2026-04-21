@@ -35,7 +35,7 @@ def main():
         "building_type": "Багатоповерховий будинок",
         "damage_level": "Середнє",
         "region": "м. Львів",
-        "repair_type": "Капітальний"
+        "repair_type": "Капітальний ремонт"
     }
 
     x_new = preprocess_input(input_data, feature_columns)

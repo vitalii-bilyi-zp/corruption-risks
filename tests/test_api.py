@@ -73,7 +73,7 @@ def valid_payload():
         "building_type": "Багатоповерховий будинок",
         "damage_level": "Середнє",
         "region": "м. Запоріжжя",
-        "repair_type": "Капітальний",
+        "repair_type": "Капітальний ремонт",
     }
 
 
@@ -260,7 +260,7 @@ class TestPredict:
             "building_type": "Інше",
             "damage_level": "Легке",
             "region": "м. Київ",
-            "repair_type": "Поточний",
+            "repair_type": "Поточний ремонт",
         }
         resp = client.post("/predict", json=payload, headers=auth_headers)
         assert resp.status_code == 200
@@ -274,7 +274,7 @@ class TestPredict:
             "building_type": "Адміністративна будівля",
             "damage_level": "Тяжке",
             "region": "Київська обл.",
-            "repair_type": "Повна реконструкція",
+            "repair_type": "Знесення з новим будівництвом",
         }
         resp = client.post("/predict", json=payload, headers=auth_headers)
         assert resp.status_code == 200

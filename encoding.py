@@ -47,7 +47,7 @@ class FuzzyEncodingConfig:
                 ),
                 "repair_type": OrdinalFeatureConfig(
                     name="repair_type",
-                    categories=["Поточний", "Капітальний", "Повна реконструкція"]
+                    categories=["Поточний ремонт", "Капітальний ремонт", "Реставрація", "Знесення з новим будівництвом", "Консервація"]
                 )
             },
             nominal_features=["building_type", "region"]

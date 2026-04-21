@@ -127,7 +127,7 @@ def test_monotonicity(df: pd.DataFrame, encode_func) -> dict:
         "floors": 5,
         "building_type": "Багатоповерховий будинок",
         "region": "м. Київ",
-        "repair_type": "Капітальний"
+        "repair_type": "Капітальний ремонт"
     }
 
     damage_levels = ["Легке", "Середнє", "Тяжке"]

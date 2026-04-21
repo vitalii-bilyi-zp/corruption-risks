@@ -45,15 +45,8 @@ class InflationIndexRow(BaseModel):
     index_value: float
 
 
-ALLOWED_BUILDING_TYPES = {
-    "Багатоповерховий будинок",
-    "Адміністративна будівля",
-    "Заклад культури",
-    "Заклад вищої освіти",
-    "Інше",
-}
 ALLOWED_DAMAGE_LEVELS = {"Легке", "Середнє", "Тяжке"}
-ALLOWED_REPAIR_TYPES  = {"Поточний", "Капітальний", "Повна реконструкція"}
+ALLOWED_REPAIR_TYPES  = {"Поточний ремонт", "Капітальний ремонт", "Реставрація", "Знесення з новим будівництвом", "Консервація"}
 
 
 class Payload(BaseModel):
@@ -66,16 +59,6 @@ class Payload(BaseModel):
     work_year:  Optional[int] = Field(default=None, ge=2020, le=2040)
     work_month: Optional[int] = Field(default=None, ge=1, le=12)
     inflation_indices: Optional[List[InflationIndexRow]] = None
-
-    @field_validator("building_type")
-    @classmethod
-    def validate_building_type(cls, v: str) -> str:
-        if v not in ALLOWED_BUILDING_TYPES:
-            raise ValueError(
-                f"Недопустимий тип будівлі: '{v}'. "
-                f"Допустимі значення: {sorted(ALLOWED_BUILDING_TYPES)}"
-            )
-        return v
 
     @field_validator("damage_level")
     @classmethod
