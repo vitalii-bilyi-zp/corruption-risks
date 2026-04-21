@@ -3,7 +3,7 @@ import json
 import joblib
 import pandas as pd
 from flask import Flask, request, jsonify
-from pydantic import BaseModel, Field, ValidationError, model_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 from pathlib import Path
 from typing import Optional, List
 
@@ -24,11 +24,36 @@ def check_key(req) -> bool:
     return bool(API_KEY) and req.headers.get("X-API-Key") == API_KEY
 
 
+def _serializable_errors(ve: ValidationError) -> list:
+    """
+    Pydantic v2 включає ctx.error як об'єкт Exception, який не серіалізується
+    стандартним JSON-енкодером Flask. Конвертуємо його у рядок.
+    """
+    result = []
+    for err in ve.errors(include_url=False):
+        entry = dict(err)
+        if "ctx" in entry and isinstance(entry["ctx"].get("error"), Exception):
+            entry["ctx"] = {**entry["ctx"], "error": str(entry["ctx"]["error"])}
+        result.append(entry)
+    return result
+
+
 # -------- Input schema --------
 class InflationIndexRow(BaseModel):
     year:        int
     month:       int
     index_value: float
+
+
+ALLOWED_BUILDING_TYPES = {
+    "Багатоповерховий будинок",
+    "Адміністративна будівля",
+    "Заклад культури",
+    "Заклад вищої освіти",
+    "Інше",
+}
+ALLOWED_DAMAGE_LEVELS = {"Легке", "Середнє", "Тяжке"}
+ALLOWED_REPAIR_TYPES  = {"Поточний", "Капітальний", "Повна реконструкція"}
 
 
 class Payload(BaseModel):
@@ -41,6 +66,36 @@ class Payload(BaseModel):
     work_year:  Optional[int] = Field(default=None, ge=2020, le=2040)
     work_month: Optional[int] = Field(default=None, ge=1, le=12)
     inflation_indices: Optional[List[InflationIndexRow]] = None
+
+    @field_validator("building_type")
+    @classmethod
+    def validate_building_type(cls, v: str) -> str:
+        if v not in ALLOWED_BUILDING_TYPES:
+            raise ValueError(
+                f"Недопустимий тип будівлі: '{v}'. "
+                f"Допустимі значення: {sorted(ALLOWED_BUILDING_TYPES)}"
+            )
+        return v
+
+    @field_validator("damage_level")
+    @classmethod
+    def validate_damage_level(cls, v: str) -> str:
+        if v not in ALLOWED_DAMAGE_LEVELS:
+            raise ValueError(
+                f"Недопустимий рівень пошкодження: '{v}'. "
+                f"Допустимі значення: {sorted(ALLOWED_DAMAGE_LEVELS)}"
+            )
+        return v
+
+    @field_validator("repair_type")
+    @classmethod
+    def validate_repair_type(cls, v: str) -> str:
+        if v not in ALLOWED_REPAIR_TYPES:
+            raise ValueError(
+                f"Недопустимий тип ремонту: '{v}'. "
+                f"Допустимі значення: {sorted(ALLOWED_REPAIR_TYPES)}"
+            )
+        return v
 
     @model_validator(mode='after')
     def check_year_month_together(self):
@@ -147,7 +202,7 @@ def predict():
             "model":          "XGBoostRegressor",
         })
     except ValidationError as ve:
-        return jsonify({"error": ve.errors()}), 400
+        return jsonify({"error": _serializable_errors(ve)}), 400
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
@@ -232,7 +287,7 @@ def predict_explain():
         })
 
     except ValidationError as ve:
-        return jsonify({"error": ve.errors()}), 400
+        return jsonify({"error": _serializable_errors(ve)}), 400
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
