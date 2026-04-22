@@ -12,9 +12,11 @@
         "damage_level_Тяжке"
     ],
     "repair_type": [
-        "repair_type_Поточний",
-        "repair_type_Капітальний",
-        "repair_type_Повна реконструкція"
+        "repair_type_Поточний ремонт",
+        "repair_type_Капітальний ремонт",
+        "repair_type_Реставрація",
+        "repair_type_Знесення з новим будівництвом",
+        "repair_type_Консервація"
     ],
     "building_type": [
         "building_type_Інше",
